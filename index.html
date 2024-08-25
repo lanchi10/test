@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>יישום תקשורת למטופל</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 10px;
+            text-align: center;
+        }
+        .phrase-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+        }
+        .phrase-button {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 18px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+        .phrase-button.active {
+            background-color: #2ecc71;
+            transform: scale(1.05);
+        }
+        .icon-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+        }
+        .icon-button img {
+            width: 24px;
+            height: 24px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        .modal-content {
+            margin: 10% auto;
+            width: 90%;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .close {
+            font-size: 24px;
+            color: #aaa;
+            float: right;
+            cursor: pointer;
+        }
+        select, input[type="text"], input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        h1, h2 {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>יישום תקשורת למטופל</h1>
+
+    <div id="voiceSelection" class="category">
+        <h2>בחירת קול</h2>
+        <select id="voiceSelect"></select>
+    </div>
+
+    <div id="languageSelection" class="category">
+        <h2>בחירת שפה</h2>
+        <select id="languageSelect">
+            <option value="he-IL">עברית</option>
+            <option value="en-US">אנגלית</option>
+        </select>
+    </div>
+
+    <div id="speedControl" class="category">
+        <h2>קצב דיבור</h2>
+        <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.1" value="1">
+        <span id="speedValue">1</span>
+    </div>
+
+    <div id="phrasesContainer" class="category">
+        <h2>בקשות ושאלות</h2>
+    </div>
+
+    <div id="addPhraseForm" class="category">
+        <h2>הוסף משפט חדש</h2>
+        <input type="text" id="newHebrew" placeholder="טקסט בעברית">
+        <input type="text" id="newTrans" placeholder="תעתיק באנגלית">
+        <button onclick="addNewPhrase()">הוסף משפט</button>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>ערוך משפט</h2>
+            <input type="text" id="editHebrew" placeholder="טקסט בעברית">
+            <input type="text" id="editTrans" placeholder="תעתיק באנגלית">
+            <button onclick="saveEdit()">שמור שינויים</button>
+        </div>
+    </div>
+
+    <script>
+        let phrases = JSON.parse(localStorage.getItem('phrases')) || [
+            {hebrew: 'קרא לאחות', trans: 'kra la\'akhot', color: '#3498db'},
+            {hebrew: 'אני מרגיש כאב', trans: 'ani margish ke\'ev', color: '#3498db'},
+            // Add more phrases as needed
+        ];
+        let voices = [];
+        let editingIndex = -1;
+
+        function populateVoiceList() {
+            voices = speechSynthesis.getVoices();
+            const voiceSelect = document.getElementById('voiceSelect');
+            voiceSelect.innerHTML = '';
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        function createPhraseElements() {
+            const container = document.getElementById('phrasesContainer');
+            container.innerHTML = '';
+            phrases.forEach((phrase, index) => {
+                const phraseContainer = document.createElement('div');
+                phraseContainer.className = 'phrase-container';
+
+                const button = document.createElement('button');
+                button.className = 'phrase-button';
+                button.textContent = phrase.hebrew;
+                button.style.backgroundColor = phrase.color;
+                button.onclick = () => speakText(phrase.trans, button, index);
+
+                const editButton = document.createElement('button');
+                editButton.className = 'icon-button';
+                editButton.innerHTML = '<img src="https://img.icons8.com/ios-filled/50/000000/edit.png" alt="ערוך">'; 
+                editButton.onclick = () => openEditModal(index);
+
+                const moveUpButton = document.createElement('button');
+                moveUpButton.className = 'icon-button';
+                moveUpButton.innerHTML = '<img src="https://img.icons8.com/ios-filled/50/000000/up.png" alt="מעלה">'; 
+                moveUpButton.onclick = () => movePhraseUp(index);
+
+                const moveDownButton = document.createElement('button');
+                moveDownButton.className = 'icon-button';
+                moveDownButton.innerHTML = '<img src="https://img.icons8.com/ios-filled/50/000000/down.png" alt="מטה">'; 
+                moveDownButton.onclick = () => movePhraseDown(index);
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'icon-button';
+                deleteButton.innerHTML = '<img src="https://img.icons8.com/ios-filled/50/000000/delete.png" alt="מחק">';
+                deleteButton.onclick = () => deletePhrase(index);
+
+                phraseContainer.appendChild(button);
+                phraseContainer.appendChild(editButton);
+                phraseContainer.appendChild(moveUpButton);
+                phraseContainer.appendChild(moveDownButton);
+                phraseContainer.appendChild(deleteButton);
+
+                container.appendChild(phraseContainer);
+            });
+        }
+
+        function speakText(text, button, index) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const selectedVoice = voices[document.getElementById('voiceSelect').selectedIndex];
+                utterance.voice = selectedVoice;
+                utterance.lang = document.getElementById('languageSelect').value;
+                utterance.rate = parseFloat(document.getElementById('speedSlider').value);
+                speechSynthesis.speak(utterance);
+
+                document.querySelectorAll('.phrase-button').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                // Save the new color for the next click
+                phrases[index].color = '#2ecc71';
+                localStorage.setItem('phrases', JSON.stringify(phrases));
+            } else {
+                alert("הדפדפן שלך לא תומך בהמרת טקסט לדיבור.");
+            }
+        }
+
+        function addNewPhrase() {
+            const newHebrew = document.getElementById('newHebrew').value;
+            const newTrans = document.getElementById('newTrans').value;
+            if (newHebrew && newTrans) {
+                phrases.push({hebrew: newHebrew, trans: newTrans, color: '#3498db'});
+                savePhrases();
+                createPhraseElements();
+                document.getElementById('newHebrew').value = '';
+                document.getElementById('newTrans').value = '';
+            } else {
+                alert('נא למלא את שני השדות');
+            }
+        }
+
+        function openEditModal(index) {
+            editingIndex = index;
+            const modal = document.getElementById('editModal');
+            document.getElementById('editHebrew').value = phrases[index].hebrew;
+            document.getElementById('editTrans').value = phrases[index].trans;
+            modal.style.display = 'block';
+        }
+
+        function saveEdit() {
+            phrases[editingIndex].hebrew = document.getElementById('editHebrew').value;
+            phrases[editingIndex].trans = document.getElementById('editTrans').value;
+            savePhrases();
+            createPhraseElements();
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function movePhraseUp(index) {
+            if (index > 0) {
+                const temp = phrases[index];
+                phrases[index] = phrases[index - 1];
+                phrases[index - 1] = temp;
+                savePhrases();
+                createPhraseElements();
+            }
+        }
+
+        function movePhraseDown(index) {
+            if (index < phrases.length - 1) {
+                const temp = phrases[index];
+                phrases[index] = phrases[index + 1];
+                phrases[index + 1] = temp;
+                savePhrases();
+                createPhraseElements();
+            }
+        }
+
+        function deletePhrase(index) {
+            phrases.splice(index, 1);
+            savePhrases();
+            createPhraseElements();
+        }
+
+        function savePhrases() {
+            localStorage.setItem('phrases', JSON.stringify(phrases));
+        }
+
+        // Initialize the application
+        window.onload = function() {
+            populateVoiceList();
+            createPhraseElements();
+
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+            }
+
+            // Update the displayed speed value as the slider moves
+            document.getElementById('speedSlider').oninput = function() {
+                document.getElementById('speedValue').textContent = this.value;
+            };
+        };
+    </script>
+</body>
+</html>
